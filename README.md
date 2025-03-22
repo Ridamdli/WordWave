@@ -142,4 +142,4 @@ If you have any questions or suggestions, please open an issue on this repositor
 
 ---
 
-Built with ❤️ by [Your Name] 
+Built with ❤️ by Rida El-yousfi
