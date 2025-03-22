@@ -1,0 +1,32 @@
+/* Add these CSS rules at the end of the file */
+
+/* Ensure proper fixed header spacing */
+body {
+  scroll-padding-top: 9rem; /* Adjusts scroll-to behavior to account for fixed header */
+}
+
+/* Keep search bar above all other elements */
+.fixed-search-container {
+  position: fixed;
+  top: 4rem; /* 16px from theme */
+  left: 0;
+  right: 0;
+  z-index: 100; /* Very high z-index */
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+}
+
+/* Add margin to main content to prevent overlap */
+.content-with-fixed-header {
+  margin-top: 8rem;
+}
+
+/* No scrollbar utility class */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+} 

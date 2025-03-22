@@ -1,0 +1,14 @@
+---
+description: Database & Backend Rules for My Library (Digital Library)
+globs: 
+alwaysApply: false
+---
+# Database & Backend Rules for My Library
+
+- The database is managed using Supabase.
+- Supabase tables include: `books`, `users`, `downloads`, `favorites`, and `reviews`.
+- Edge Functions should handle operations like saving downloads and fetching related books.
+- Book search queries should be case-insensitive and use `ILIKE` for better matching.
+- Every time a user downloads a book, it should be recorded in the `downloads` table.
+- User authentication and session management should be handled via Supabase Auth.
+- The AI agent (n8n) will assist in improving search and recommendation features.
