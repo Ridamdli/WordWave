@@ -24,8 +24,8 @@ WordWave is a modern digital library platform built with React, TypeScript, and 
 1. **Clone the repository**
 
 ```bash
-git clone https://github.com/yourusername/wordwave.git
-cd wordwave
+git clone https://github.com/Ridamdli/WordWave.git
+cd WordWave
 ```
 
 2. **Install dependencies**
