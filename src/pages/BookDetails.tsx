@@ -4,7 +4,7 @@ import { Book, Download, Heart, Share2, Star, ArrowLeft, MessageCircle, Send, Fl
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { getBookCoverUrl, toggleLike, checkIfLiked } from '../lib/books';
 import { useImageWithFallback } from '../lib/hooks';

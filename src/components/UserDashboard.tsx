@@ -98,7 +98,10 @@ const LibraryBookCard = ({ book }: { book: UserBook }) => {
           >
             Continue Reading
           </button>
-          <button className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">
+          <button 
+            aria-label="Download book"
+            className="p-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600"
+          >
             <Download className="h-5 w-5" />
           </button>
         </div>

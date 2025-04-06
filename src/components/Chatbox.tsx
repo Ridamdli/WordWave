@@ -13,7 +13,7 @@ export default function Chatbox() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [isOpen, setIsOpen] = useState(false);
-    const [isTyping, setIsTyping] = useState(false);
+    const [isTyping] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
