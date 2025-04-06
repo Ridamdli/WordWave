@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { Search, Filter, BookOpen, Download, Star, Heart, X, Menu, ChevronRight, ArrowLeft, Grid, LayoutGrid } from 'lucide-react';
 import SearchBar from './SearchBar';
 import LoadingSpinner from './LoadingSpinner';
@@ -354,13 +355,15 @@ const CategorySection = React.memo(({
   books, 
   scrollContainerRefs,
   onBookClick, 
-  onViewAll 
+  onViewAll,
+  isActiveCategory
 }: { 
   category: string, 
   books: Book[], 
   scrollContainerRefs: React.MutableRefObject<{[key: string]: HTMLDivElement | null}>,
   onBookClick: (id: string) => void,
-  onViewAll: (category: string) => void
+  onViewAll: (category: string) => void,
+  isActiveCategory: boolean
 }) => {
   const [showLeftButton, setShowLeftButton] = useState(false);
   const [showRightButton, setShowRightButton] = useState(true);
@@ -383,10 +386,32 @@ const CategorySection = React.memo(({
   const handleLoadMore = useCallback(() => {
     if (loadedCount >= books.length) return;
     
-    // Load next batch of books
-    const nextBatch = Math.min(loadedCount + 4, books.length);
-    setLoadedCount(nextBatch);
-  }, [books.length, loadedCount]);
+    // Load next batch of books with a slight delay for smoother UX
+    setTimeout(() => {
+      // Calculate how many more books to load based on screen size
+      const batchSize = window.innerWidth < 768 ? 4 : 6;
+      const nextBatch = Math.min(loadedCount + batchSize, books.length);
+      
+      setLoadedCount(nextBatch);
+      
+      // After loading more books, ensure the new ones are visible
+      // by scrolling slightly further right
+      requestAnimationFrame(() => {
+        const scrollContainer = scrollContainerRefs.current[category];
+        if (scrollContainer) {
+          const isNearEnd = scrollContainer.scrollLeft + scrollContainer.clientWidth >= 
+            scrollContainer.scrollWidth - 300;
+            
+          if (isNearEnd) {
+            scrollContainer.scrollBy({
+              left: 200,
+              behavior: 'smooth'
+            });
+          }
+        }
+      });
+    }, 100);
+  }, [books.length, loadedCount, category, scrollContainerRefs]);
   
   // Use the ref setter function to store the element reference - memoized
   const setScrollContainerRef = useCallback((element: HTMLDivElement | null) => {
@@ -403,27 +428,33 @@ const CategorySection = React.memo(({
   const handleScroll = useMemo(() => {
     return throttle((e: React.UIEvent<HTMLDivElement>) => {
       const container = e.currentTarget;
-      setShowLeftButton(container.scrollLeft > 0);
       
-      // Check if we're near the end of the scroll to load more books
-      const isNearEnd = container.scrollLeft + container.clientWidth >= 
-        container.scrollWidth - 300; // 300px threshold before the end
+      // Detect left button visibility
+      setShowLeftButton(container.scrollLeft > 20);
       
-      setShowRightButton(!isNearEnd || loadedCount < books.length);
+      // Calculate if we're near the right edge
+      // Allow a 40px buffer to ensure the last items can be seen completely
+      const isAtRightEdge = (container.scrollLeft + container.clientWidth) >= 
+        (container.scrollWidth - 40);
+      
+      setShowRightButton(!isAtRightEdge);
       
       // Load more books if we're near the end and haven't loaded all books yet
-      if (isNearEnd && loadedCount < books.length) {
+      if (isAtRightEdge && loadedCount < books.length) {
         handleLoadMore();
       }
     }, 100); // 100ms throttle
   }, [books.length, handleLoadMore, loadedCount]);
   
-  // Memoize button click handlers
+  // Memoize button click handlers and improve scroll behavior
   const handleLeftScroll = useCallback(() => {
     const scrollContainer = scrollContainerRefs.current[category];
     if (scrollContainer) {
+      // Calculate scroll amount based on container width
+      const scrollAmount = Math.min(scrollContainer.clientWidth * 0.8, 500);
+      
       scrollContainer.scrollBy({
-        left: -400,
+        left: -scrollAmount,
         behavior: 'smooth'
       });
     }
@@ -432,23 +463,36 @@ const CategorySection = React.memo(({
   const handleRightScroll = useCallback(() => {
     const scrollContainer = scrollContainerRefs.current[category];
     if (scrollContainer) {
+      // Calculate scroll amount based on container width
+      const scrollAmount = Math.min(scrollContainer.clientWidth * 0.8, 500);
+      
       scrollContainer.scrollBy({
-        left: 400,
+        left: scrollAmount,
         behavior: 'smooth'
       });
       
       // Check if we're near the end after scrolling
       setTimeout(() => {
         if (scrollContainer.scrollLeft + scrollContainer.clientWidth >= 
-            scrollContainer.scrollWidth - 500) {
+            scrollContainer.scrollWidth - 100) {
           handleLoadMore();
         }
       }, 500);
     }
   }, [category, handleLoadMore, scrollContainerRefs]);
   
-  // Memoize viewAll handler
-  const handleViewAll = useCallback(() => {
+  // Ensure the category click is handled directly and works with a single click
+  const handleCategoryClick = useCallback((e: React.MouseEvent) => {
+    // Prevent default browser behavior that causes page refresh
+    if (e && e.preventDefault) e.preventDefault();
+    
+    // Stop event bubbling to parent elements
+    if (e && e.stopPropagation) e.stopPropagation();
+    
+    // We need to capture and stop the event immediately before any other logic
+    if (e && e.nativeEvent) e.nativeEvent.stopImmediatePropagation();
+    
+    // Directly call onViewAll with the category for immediate action
     onViewAll(category);
   }, [category, onViewAll]);
   
@@ -460,26 +504,28 @@ const CategorySection = React.memo(({
       transition={{ duration: 0.5 }}
       className="mb-6 relative group"
     >
-      {/* Category Title with View All button */}
+      {/* Category Title */}
       <div className="flex justify-between items-center mb-4 px-1">
-        <h2 className="text-xl font-semibold dark:text-white">{category}</h2>
-        <button 
-          onClick={handleViewAll}
-          className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center"
+        <motion.button 
+          onClick={handleCategoryClick}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="text-xl font-semibold dark:text-white hover:text-blue-500 dark:hover:text-blue-400 transition-colors flex items-center cursor-pointer"
+          type="button"
         >
-          View All
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </button>
+          {category}
+          <ChevronRight className="ml-2 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </motion.button>
       </div>
       
       {/* Left scroll button - larger hit area on mobile */}
       <button 
         className={`absolute left-0 top-1/2 transform -translate-y-1/2 z-10 
-          bg-white/80 dark:bg-gray-800/80 rounded-full p-2 md:p-3 shadow-lg backdrop-blur-sm
+          bg-white/90 dark:bg-gray-800/90 rounded-full p-2 md:p-3 shadow-lg backdrop-blur-sm
           border border-gray-200 dark:border-gray-700 
           transition-opacity focus:outline-none will-change-transform
-          ${!showLeftButton ? 'hidden' : ''}
-          opacity-0 group-hover:opacity-100 touch-manipulation`}
+          ${!showLeftButton ? 'opacity-0 pointer-events-none' : 'opacity-90'}
+          md:group-hover:opacity-100 hover:opacity-100 touch-manipulation`}
         onClick={handleLeftScroll}
         aria-label="Scroll left"
       >
@@ -489,15 +535,20 @@ const CategorySection = React.memo(({
       {/* Horizontal scrolling book list with improved scroll behavior */}
       <div 
         ref={setScrollContainerRef}
-        className="overflow-x-auto no-scrollbar pb-4 max-w-full relative" 
+        className="overflow-x-auto pb-4 max-w-full relative scroll-smooth" 
         style={{ 
           scrollBehavior: "smooth", 
           WebkitOverflowScrolling: "touch",
-          msOverflowStyle: "none"
+          msOverflowStyle: "none",
+          scrollPaddingRight: "50px", // Reduce padding since "View All" button is removed
+          scrollPaddingLeft: "16px",
+          // Add scrollbar styling for browsers that support it
+          scrollbarWidth: "thin",
+          scrollbarColor: "rgba(156, 163, 175, 0.5) transparent"
         }}
         onScroll={handleScroll}
       >
-        <div className="flex gap-4 w-max pl-2 pr-2">
+        <div className="flex gap-4 w-max pl-2 pr-8">
           {visibleBooks.map(book => (
             <div key={book.id} className="flex-shrink-0">
               <BookCard book={book} onBookClick={onBookClick} />
@@ -519,11 +570,11 @@ const CategorySection = React.memo(({
       {/* Right scroll button - larger hit area on mobile */}
       <button 
         className={`absolute right-0 top-1/2 transform -translate-y-1/2 z-10
-          bg-white/80 dark:bg-gray-800/80 rounded-full p-2 md:p-3 shadow-lg backdrop-blur-sm
+          bg-white/90 dark:bg-gray-800/90 rounded-full p-2 md:p-3 shadow-lg backdrop-blur-sm
           border border-gray-200 dark:border-gray-700 
           transition-opacity focus:outline-none will-change-transform
-          ${!showRightButton ? 'hidden' : ''}
-          opacity-0 group-hover:opacity-100 hover:opacity-100 touch-manipulation`}
+          ${!showRightButton ? 'opacity-0 pointer-events-none' : 'opacity-90'}
+          md:group-hover:opacity-100 hover:opacity-100 touch-manipulation`}
         onClick={handleRightScroll}
         aria-label="Scroll right"
       >
@@ -620,7 +671,7 @@ const BrowseLibrary: React.FC<BrowseLibraryProps> = ({ onBookClick }) => {
     return map;
   }, []);
 
-  // Memoize the filter function to avoid recalculations
+  // Update filter function to properly update booksByCategory as well
   const applyFilters = useCallback((
     booksToFilter: Book[], 
     query: string, 
@@ -640,6 +691,18 @@ const BrowseLibrary: React.FC<BrowseLibraryProps> = ({ onBookClick }) => {
         if (!formats.some(format => bookFormats.includes(format))) {
           return false;
         }
+      }
+      
+      // Apply search filter if query exists
+      if (query) {
+        const bookTitle = book.title.toLowerCase();
+        const bookAuthor = book.author.toLowerCase();
+        const bookCategory = (book.category || '').toLowerCase();
+        const searchLower = query.toLowerCase();
+        
+        return bookTitle.includes(searchLower) || 
+               bookAuthor.includes(searchLower) || 
+               bookCategory.includes(searchLower);
       }
       
       return true;
@@ -720,87 +783,102 @@ const BrowseLibrary: React.FC<BrowseLibraryProps> = ({ onBookClick }) => {
     navigate(path);
   }, [navigate]);
 
-  const handleCategoryViewAll = useCallback((category: string) => {
-    setSelectedCategory(category);
-    setViewMode('vertical');
-    // Scroll to top when viewing all books in a category
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Add a force update function using useState trick
+  const [, forceRender] = useState({});
+  const forceUpdate = useCallback(() => {
+    forceRender({});
   }, []);
+
+  // Optimize category selection for a smooth transition to grid view
+  const directCategorySelect = useCallback((category: string) => {
+    // Handle the state updates in a specific order for smoother transitions
+    
+    // First update the category selection
+    setSelectedCategory(category);
+    
+    // Then change the view mode with a smooth transition
+    setViewMode('vertical');
+    
+    // Apply filters with the selected category
+    applyFilters(books, searchQuery, category, selectedFormats);
+    
+    // Scroll to top with smooth animation for better UX
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+  }, [books, searchQuery, selectedFormats, applyFilters]);
+
+  // Add handler for view mode toggle
+  const handleViewModeToggle = useCallback(() => {
+    setViewMode(prev => prev === 'horizontal' ? 'vertical' : 'horizontal');
+    // Reset category selection when switching back to horizontal view
+    if (viewMode === 'vertical') {
+      setSelectedCategory('All Categories');
+    }
+  }, [viewMode]);
 
   // Memoize the horizontal view rendering to improve performance
   const renderHorizontalCategoryView = useCallback(() => {
-    // Get all categories with books
-    const availableCategories = Object.keys(booksByCategory).sort();
-    
-    if (availableCategories.length === 0) {
+    if (Object.keys(booksByCategory).length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center py-12">
-          <BookOpen className="h-16 w-16 text-gray-400 dark:text-gray-600 mb-4" />
-          <h3 className="text-xl font-semibold dark:text-white mb-2">No books found</h3>
-          <p className="text-gray-600 dark:text-gray-400 text-center max-w-md">
-            We couldn't find any books in our library. Please check back later.
-          </p>
+        <div className="text-center py-12">
+          <p className="text-gray-600 dark:text-gray-300">No books found in any category.</p>
         </div>
       );
     }
 
     return (
-      <div className="space-y-10">
-        {availableCategories.map(category => {
-          const categoryBooks = booksByCategory[category];
-          
-          // Skip categories with no books
-          if (!categoryBooks || categoryBooks.length === 0) return null;
-          
-          return (
-            <CategorySection
-              key={category}
-              category={category}
-              books={categoryBooks}
-              scrollContainerRefs={scrollContainerRefs}
-              onBookClick={handleBookClick}
-              onViewAll={handleCategoryViewAll}
-            />
-          );
-        })}
+      <div className="space-y-8">
+        {Object.entries(booksByCategory).map(([category, books]) => (
+          <CategorySection
+            key={category}
+            category={category}
+            books={books}
+            scrollContainerRefs={scrollContainerRefs}
+            onBookClick={handleBookClick}
+            onViewAll={directCategorySelect} // Use the new direct handler here
+            isActiveCategory={selectedCategory === category}
+          />
+        ))}
       </div>
     );
-  }, [booksByCategory, handleBookClick, handleCategoryViewAll]);
+  }, [booksByCategory, handleBookClick, directCategorySelect, selectedCategory]);
 
-  // Memoize the vertical grid view rendering
-  const renderVerticalBookGrid = useMemo(() => {
+  // Ensure consistent handling of the vertical book grid
+  const renderVerticalBookGrid = useCallback(() => {
     if (filteredBooks.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-12">
           <BookOpen className="h-16 w-16 text-gray-400 dark:text-gray-600 mb-4" />
           <h3 className="text-xl font-semibold dark:text-white mb-2">No books found</h3>
           <p className="text-gray-600 dark:text-gray-400 text-center max-w-md">
-            We couldn't find any books matching your search criteria. Try adjusting your filters or search query.
+            We couldn't find any books matching your criteria. Try adjusting your filters or search query.
           </p>
         </div>
       );
     }
-
-    const handleBackToCategories = () => {
-      setSelectedCategory('All Categories');
-      setViewMode('horizontal');
-  };
-
-  return (
+    
+    return (
       <>
-        <div className="mb-4 flex justify-between items-center">
-          <h2 className="text-xl font-semibold dark:text-white">
-            {selectedCategory !== 'All Categories' ? selectedCategory : 'All Books'} • {filteredBooks.length} {filteredBooks.length === 1 ? 'Book' : 'Books'}
-          </h2>
-          {selectedCategory !== 'All Categories' && (
-            <button 
-              onClick={handleBackToCategories}
-              className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center"
+        <div className="mb-6 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => {
+                setSelectedCategory('All Categories');
+                setViewMode('horizontal');
+                // Apply filters to show all books when going back
+                applyFilters(books, searchQuery, 'All Categories', selectedFormats);
+              }}
+              className="flex items-center px-4 py-2 bg-white dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border border-gray-200 dark:border-gray-600 shadow-sm"
             >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back to All Categories
-            </button>
-          )}
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              Back to Categories
+            </motion.button>
+            <h2 className="text-xl font-semibold dark:text-white">
+              {selectedCategory} • {filteredBooks.length} {filteredBooks.length === 1 ? 'Book' : 'Books'}
+            </h2>
+          </div>
         </div>
         
         <motion.div
@@ -808,7 +886,7 @@ const BrowseLibrary: React.FC<BrowseLibraryProps> = ({ onBookClick }) => {
           initial={{ opacity: 0 }}
           animate={inView ? { opacity: 1 } : { opacity: 0 }}
           transition={{ duration: 0.5 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
         >
           {filteredBooks.map(book => (
             <BookCard key={book.id} book={book} onBookClick={handleBookClick} />
@@ -816,117 +894,7 @@ const BrowseLibrary: React.FC<BrowseLibraryProps> = ({ onBookClick }) => {
         </motion.div>
       </>
     );
-  }, [filteredBooks, handleBookClick, inView, ref, selectedCategory]);
-
-  // Optimize wheel event listeners for all categories with throttling
-  useEffect(() => {
-    // Create a single throttled handler for better performance
-    const createThrottledWheelHandler = (scrollContainer: HTMLDivElement) => {
-      return throttle((e: WheelEvent) => {
-        // Only if shift key is not pressed (to allow normal vertical scrolling)
-        if (!e.shiftKey && Math.abs(e.deltaY) > 0) {
-          // Calculate if we should allow default vertical scroll
-          const isAtLeftEdge = scrollContainer.scrollLeft === 0;
-          const isAtRightEdge = 
-            scrollContainer.scrollLeft + scrollContainer.clientWidth >= 
-            scrollContainer.scrollWidth - 1; // -1 to account for rounding errors
-            
-          // If we're not at an edge or if we're scrolling horizontally, prevent default
-          if (!(isAtLeftEdge && e.deltaY < 0) && !(isAtRightEdge && e.deltaY > 0)) {
-            e.preventDefault();
-            
-            // Smooth scroll with inertia
-            const scrollAmount = e.deltaY * 1.5; // Adjust multiplier for scroll speed
-            scrollContainer.scrollBy({
-              left: scrollAmount,
-              behavior: 'smooth'
-            });
-          }
-        }
-      }, 16); // 60fps (16ms) throttle for smooth scrolling
-    };
-    
-    // Create a single throttled handler for touch events
-    const createTouchHandlers = (scrollContainer: HTMLDivElement) => {
-      let isScrolling = false;
-      let startX = 0;
-      let startScrollLeft = 0;
-      
-      // Throttled touch move handler
-      const handleTouchMove = throttle((e: TouchEvent) => {
-        if (!isScrolling) return;
-        
-        const x = e.touches[0].pageX;
-        const walk = (startX - x) * 2; // Adjust multiplier for scroll speed
-        scrollContainer.scrollLeft = startScrollLeft + walk;
-      }, 16); // 60fps throttle
-      
-      return {
-        start: (e: TouchEvent) => {
-          isScrolling = true;
-          startX = e.touches[0].pageX;
-          startScrollLeft = scrollContainer.scrollLeft;
-        },
-        move: handleTouchMove,
-        end: () => {
-          isScrolling = false;
-        }
-      };
-    };
-    
-    // Store all event handlers so we can remove them later
-    const handlersMap: {[key: string]: (e: WheelEvent) => void} = {};
-    const touchHandlersMap: {[key: string]: {
-      start: (e: TouchEvent) => void,
-      move: (e: TouchEvent) => void,
-      end: () => void
-    }} = {};
-    
-    // Get all categories from booksByCategory
-    const categories = Object.keys(booksByCategory);
-    
-    // Set up event listeners for each category
-    categories.forEach(category => {
-      const scrollContainer = scrollContainerRefs.current[category];
-      if (!scrollContainer) return;
-      
-      // Create throttled handlers
-      const wheelHandler = createThrottledWheelHandler(scrollContainer);
-      const touchHandlers = createTouchHandlers(scrollContainer);
-      
-      // Store handler references for cleanup
-      handlersMap[category] = wheelHandler;
-      touchHandlersMap[category] = touchHandlers;
-      
-      // Add event listeners
-      scrollContainer.addEventListener('wheel', wheelHandler, { passive: false });
-      scrollContainer.addEventListener('touchstart', touchHandlers.start);
-      scrollContainer.addEventListener('touchmove', touchHandlers.move);
-      scrollContainer.addEventListener('touchend', touchHandlers.end);
-    });
-    
-    // Cleanup function
-    return () => {
-      categories.forEach(category => {
-        const scrollContainer = scrollContainerRefs.current[category];
-        const handler = handlersMap[category];
-        const touchHandlers = touchHandlersMap[category];
-        
-        if (scrollContainer) {
-          if (handler) {
-            scrollContainer.removeEventListener('wheel', handler);
-          }
-          
-          // Clean up touch events
-          if (touchHandlers) {
-            scrollContainer.removeEventListener('touchstart', touchHandlers.start);
-            scrollContainer.removeEventListener('touchmove', touchHandlers.move);
-            scrollContainer.removeEventListener('touchend', touchHandlers.end);
-          }
-        }
-      });
-    };
-  }, [booksByCategory]); // Re-run when booksByCategory changes
+  }, [filteredBooks, handleBookClick, inView, ref, selectedCategory, books, searchQuery, selectedFormats, applyFilters]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white dark:from-gray-900 dark:to-gray-800 pt-16 overflow-x-hidden">
@@ -938,10 +906,10 @@ const BrowseLibrary: React.FC<BrowseLibraryProps> = ({ onBookClick }) => {
               <SearchBar onSearch={handleSearch} />
             </div>
             <div className="flex items-center gap-2 self-end md:self-auto">
-              <motion.button 
+              <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => setViewMode(viewMode === 'horizontal' ? 'vertical' : 'horizontal')}
+                onClick={handleViewModeToggle}
                 className="p-2.5 bg-white dark:bg-gray-700 rounded-lg flex items-center text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border border-gray-200 dark:border-gray-600 shadow-sm"
                 title={viewMode === 'horizontal' ? 'Switch to Grid View' : 'Switch to Category View'}
               >
@@ -1078,9 +1046,9 @@ const BrowseLibrary: React.FC<BrowseLibraryProps> = ({ onBookClick }) => {
             ) : viewMode === 'horizontal' ? (
               <div className="w-full">
                 {renderHorizontalCategoryView()}
-                  </div>
+              </div>
             ) : (
-              renderVerticalBookGrid
+              renderVerticalBookGrid()
             )}
           </div>
         </div>

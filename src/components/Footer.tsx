@@ -17,7 +17,7 @@ const Footer: React.FC = () => {
           <div>
             <h3 className="text-lg font-semibold text-white mb-4">Quick Links</h3>
             <ul className="space-y-2">
-              <li><a href="#" className="hover:text-blue-400">Home</a></li>
+              <li><a href="../pages/Home.tsx" className="hover:text-blue-400">Home</a></li>
               <li><a href="#" className="hover:text-blue-400">Browse</a></li>
               <li><a href="#" className="hover:text-blue-400">Categories</a></li>
               <li><a href="#" className="hover:text-blue-400">About Us</a></li>
@@ -39,15 +39,15 @@ const Footer: React.FC = () => {
             <ul className="space-y-2">
               <li className="flex items-center">
                 <Mail className="h-5 w-5 mr-2" />
-                support@wordwave.com
+                gusgrifit@gmail.com
               </li>
               <li className="flex items-center">
                 <Phone className="h-5 w-5 mr-2" />
-                +1 (555) 123-4567
+                +212 621-962745
               </li>
               <li className="flex items-center">
                 <MapPin className="h-5 w-5 mr-2" />
-                123 Library Street, Book City
+                 Morocco, Imouzzer Kander City
               </li>
             </ul>
           </div>

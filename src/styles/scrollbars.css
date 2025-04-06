@@ -9,6 +9,39 @@
   scrollbar-width: none;  /* Firefox */
 }
 
+/* Custom scrollbar styling for browsers that support it */
+.scroll-smooth::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.scroll-smooth::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-smooth::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 20px;
+}
+
+.scroll-smooth::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.8);
+}
+
+/* Dark mode scrollbar */
+.dark .scroll-smooth::-webkit-scrollbar-thumb {
+  background-color: rgba(107, 114, 128, 0.5);
+}
+
+.dark .scroll-smooth::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.8);
+}
+
+/* Add smooth scrolling to html */
+html {
+  scroll-behavior: smooth;
+}
+
 /* Prevent pull-to-refresh on mobile devices */
 html, body {
   overscroll-behavior-x: none;

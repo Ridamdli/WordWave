@@ -29,6 +29,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
   const [showAISearch, setShowAISearch] = useState(false);
   const [aiQuery, setAiQuery] = useState('');
   const [isProcessingAI, setIsProcessingAI] = useState(false);
+  const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const [filters, setFilters] = useState<SearchFilters>({
     category: 'All',
     format: [],
@@ -120,50 +121,117 @@ const SearchBar: React.FC<SearchBarProps> = ({
     if (!aiQuery.trim()) return;
     
     setIsProcessingAI(true);
+    setAiSearchLoading(true);
     
     try {
-      // Simulate AI processing
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // N8N Webhook URL
+      const webhookUrl = 'https://guuusgostavo.app.n8n.cloud/webhook-test/7e40520b-8e1e-4c2d-8a27-231b3b5f8384';
       
-      // Parse the natural language query
-      let newQuery = '';
-      let newFilters = { ...filters };
+      // Set a timeout for the fetch request
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
-      // Simple keyword extraction (in a real app, this would use NLP)
-      const lowercaseQuery = aiQuery.toLowerCase();
+      // Fetch with retry logic
+      let attempts = 0;
+      const maxAttempts = 2;
+      let responseText = '';
+      let success = false;
       
-      // Extract category
-      if (lowercaseQuery.includes('fiction')) newFilters.category = 'Fiction';
-      else if (lowercaseQuery.includes('science')) newFilters.category = 'Science';
-      else if (lowercaseQuery.includes('business')) newFilters.category = 'Business';
-      else if (lowercaseQuery.includes('history')) newFilters.category = 'History';
-      else if (lowercaseQuery.includes('technology')) newFilters.category = 'Technology';
-      else if (lowercaseQuery.includes('art')) newFilters.category = 'Arts';
-      else if (lowercaseQuery.includes('philosophy')) newFilters.category = 'Philosophy';
-      else if (lowercaseQuery.includes('self-help') || lowercaseQuery.includes('self help')) newFilters.category = 'Self-Help';
+      while (attempts < maxAttempts && !success) {
+        attempts++;
+        try {
+          console.log(`AI Search attempt ${attempts}/${maxAttempts}`);
+          // Send POST request to n8n webhook
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+              chatInput: aiQuery,
+              sessionId: `session_${Date.now()}` // Add a unique session ID
+            }),
+            signal: controller.signal
+          });
+          
+          clearTimeout(timeoutId);
+          
+          if (!response.ok) {
+            throw new Error(`Failed to get response from AI: ${response.status}`);
+          }
+          
+          // Check if response is empty
+          responseText = await response.text();
+          if (!responseText || responseText.trim() === '') {
+            console.warn('Empty response from webhook, attempt', attempts);
+            if (attempts >= maxAttempts) {
+              toast.error('AI search returned an empty response. Please try again.');
+              onSearch(aiQuery, []);
+              return;
+            }
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          
+          success = true;
+        } catch (fetchError) {
+          console.error(`Fetch error on attempt ${attempts}:`, fetchError);
+          if (attempts >= maxAttempts) {
+            if (fetchError.name === 'AbortError') {
+              toast.error('AI search timed out. Please try again later.');
+            } else {
+              console.error('AI search fetch error:', fetchError);
+              toast.error(`AI search failed: ${fetchError.message}`);
+            }
+            onSearch(aiQuery, []);
+            return;
+          }
+          
+          // Wait before retrying
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
       
-      // Extract format preferences
-      if (lowercaseQuery.includes('pdf')) newFilters.format = ['PDF'];
-      else if (lowercaseQuery.includes('epub')) newFilters.format = ['EPUB'];
-      else if (lowercaseQuery.includes('audio')) newFilters.format = ['Audiobook'];
+      if (!success) {
+        toast.error('Unable to connect to AI service after multiple attempts');
+        return;
+      }
       
-      // Extract main search terms (simplified)
-      newQuery = aiQuery
-        .replace(/best|popular|top|recommended|fiction|science|business|history|technology|art|philosophy|self-help|self help|pdf|epub|audio/gi, '')
-        .trim();
+      // Parse the response data
+      let books;
+      try {
+        books = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Error parsing JSON response:', parseError, 'Response was:', responseText);
+        toast.error('Invalid response format from AI search');
+        onSearch(aiQuery, []);
+        return;
+      }
       
-      setQuery(newQuery);
-      setFilters(newFilters);
+      // Process the webhook response using the helper function
+      const transformedBooks = processWebhookResponse(books);
       
-      // Process search with extracted query
-      debouncedSearch(newQuery);
+      // If the n8n webhook returned books, pass them to the onSearch function
+      if (transformedBooks.length > 0) {
+        // Set the query to the AI search term and pass the AI-generated results
+        setQuery(aiQuery);
+        onSearch(aiQuery, transformedBooks);
       setShowAISearch(false);
       
-      toast.success('AI search completed!');
+        toast.success(`Found ${transformedBooks.length} books matching your AI search!`);
+      } else {
+        // If no books returned, show a message
+        toast.info('No books found matching your criteria. Try a different search.');
+        onSearch(aiQuery, []);
+      }
     } catch (error) {
+      console.error('AI search error:', error);
       toast.error('AI search failed. Please try again.');
+      onSearch(aiQuery, []);
     } finally {
       setIsProcessingAI(false);
+      setAiSearchLoading(false);
     }
   };
 
@@ -225,6 +293,19 @@ const SearchBar: React.FC<SearchBarProps> = ({
         </motion.button>
       </div>
 
+      {/* Display loading state outside the panel if AI search is in progress */}
+      {aiSearchLoading && !showAISearch && (
+        <div className="absolute mt-2 w-full flex items-center justify-center py-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+          <div className="flex items-center">
+            <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span className="text-purple-700 dark:text-purple-300">AI is searching for books...</span>
+          </div>
+        </div>
+      )}
+
       {/* AI Search Panel */}
       <AnimatePresence>
         {showAISearch && (
@@ -242,18 +323,18 @@ const SearchBar: React.FC<SearchBarProps> = ({
               </div>
               
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Describe what you're looking for in natural language. For example:
+                Search for books using natural language. Our AI will find the best matches for you.
               </p>
               
               <div className="space-y-2 mb-4">
                 <div className="text-xs bg-gray-100 dark:bg-gray-700 p-2 rounded text-gray-700 dark:text-gray-300">
-                  "Best science fiction novels of 2024"
+                  "philosophy books about existentialism"
                 </div>
                 <div className="text-xs bg-gray-100 dark:bg-gray-700 p-2 rounded text-gray-700 dark:text-gray-300">
-                  "Popular self-improvement books about productivity"
+                  "self-improvement books on productivity"
                 </div>
                 <div className="text-xs bg-gray-100 dark:bg-gray-700 p-2 rounded text-gray-700 dark:text-gray-300">
-                  "Business books in PDF format"
+                  "classic novels with strong female characters"
                 </div>
               </div>
               
@@ -318,6 +399,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                   Category
                 </label>
                 <select
+                  aria-label="Category filter"
                   value={filters.category}
                   onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                   className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 p-2 text-gray-900 dark:text-white"
@@ -383,6 +465,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                   Language
                 </label>
                 <select
+                  aria-label="Language filter"
                   value={filters.language}
                   onChange={(e) => setFilters({ ...filters, language: e.target.value })}
                   className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 p-2 text-gray-900 dark:text-white"
@@ -422,6 +505,40 @@ const SearchBar: React.FC<SearchBarProps> = ({
       </AnimatePresence>
     </div>
   );
+};
+
+// Helper function to validate webhook response data
+const processWebhookResponse = (data: any): any[] => {
+  if (!Array.isArray(data)) {
+    console.warn('Unexpected webhook response format:', data);
+    // If data is not an array but has a message property (common in API responses)
+    if (data && typeof data === 'object' && data.message) {
+      console.log('Received message from API:', data.message);
+    }
+    return [];
+  }
+  
+  // If the array is empty, return an empty array
+  if (data.length === 0) return [];
+  
+  // Map and validate each book object
+  return data.filter(book => {
+    // Basic validation - must have at least a title
+    return book && typeof book === 'object' && book.title;
+  }).map((book, index) => ({
+    id: `ai-book-${index}`,
+    title: book.title || 'Unknown Title',
+    author: book.author || 'Unknown Author',
+    cover_url: book.cover || '',
+    summary: book.summary || '',
+    category: book.category || 'AI Recommendations',
+    rating: book.rating || 4,
+    downloads: 0,
+    likes_count: 0,
+    formats: book.formats || ['PDF'],
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  }));
 };
 
 // Debounce utility function
